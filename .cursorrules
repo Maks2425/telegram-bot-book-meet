@@ -1,0 +1,56 @@
+# Telegram Bot Development Rules
+
+## Code Quality Standards
+
+- **Clean Code Principles**: Always write clean, maintainable code. Identify and suggest improvements and refactoring opportunities proactively.
+- **Expert-Level Code**: Write code at an expert level with proper architecture, design patterns, and best practices.
+- **Code Analysis**: Before writing any code, analyze the problem carefully, think through the solution, and suggest the best approach before implementation.
+
+## Python Best Practices
+
+- Follow PEP 8 style guidelines
+- Use type hints for all functions and methods
+- Implement proper error handling with specific exception types
+- Use context managers for resource management
+- Prefer composition over inheritance where appropriate
+- Write docstrings for all public functions, classes, and modules
+- Use meaningful variable and function names
+- Keep functions small and focused (single responsibility principle)
+- Avoid code duplication (DRY principle)
+- Use async/await properly for asynchronous operations
+- Implement proper logging instead of print statements
+- Use environment variables for configuration
+- Structure code with proper separation of concerns
+
+## Security Best Practices
+
+- **Critical**: Carefully analyze all code for security vulnerabilities, especially regarding API keys, tokens, and sensitive data
+- Never hardcode API keys, tokens, or secrets in source code
+- Always use environment variables or secure configuration management for sensitive credentials
+- Never commit secrets to version control
+- Validate and sanitize all user inputs
+- Use secure methods for storing and accessing credentials
+- Warn about potential security risks before implementing code that handles sensitive data
+- Check for accidental exposure of credentials in logs, error messages, or responses
+- Use `.env` files with `.gitignore` protection for local development
+- Implement proper authentication and authorization where needed
+
+## Code Review and Suggestions
+
+- Proactively suggest refactoring opportunities
+- Point out code smells and anti-patterns
+- Suggest performance improvements where applicable
+- Recommend better algorithms or data structures when appropriate
+- Identify potential bugs or edge cases
+- Suggest test coverage for critical functionality
+
+## Telegram Bot Specific
+
+- Handle Telegram API rate limits properly
+- Implement proper error handling for API calls
+- Use webhooks or polling appropriately
+- Structure bot commands and handlers clearly
+- Implement proper state management for conversations
+- Handle user input validation
+- Use proper logging for debugging and monitoring
+
