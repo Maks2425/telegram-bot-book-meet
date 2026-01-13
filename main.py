@@ -6,7 +6,9 @@ using aiogram 3.x framework with FSM for cleaning booking process.
 
 import asyncio
 import logging
+import os
 import sys
+from datetime import timedelta
 from typing import Final
 
 from aiogram import Bot, Dispatcher
@@ -272,6 +274,66 @@ async def process_address_input(message: Message, state: FSMContext) -> None:
     )
     
     await message.answer(text=summary_message)
+    
+    # Create calendar event
+    try:
+        from datetime import datetime, time as time_type
+        from services.calendar_service import create_calendar_event, get_calendar_service
+        import os
+        
+        if selected_date_str and selected_time:
+            # Parse date and time
+            selected_date = date_type.fromisoformat(selected_date_str)
+            time_parts = selected_time.split(':')
+            hour = int(time_parts[0])
+            minute = int(time_parts[1])
+            
+            # Create datetime objects
+            start_datetime = datetime.combine(selected_date, time_type(hour, minute))
+            # Assume cleaning takes 2 hours (can be adjusted)
+            end_datetime = start_datetime + timedelta(hours=2)
+            
+            # Format event details
+            cleaning_type_display = cleaning_type_names.get(cleaning_type, cleaning_type)
+            property_type_display = property_type_names.get(property_type, property_type)
+            
+            event_title = f"Прибирання: {cleaning_type_display} ({property_type_display})"
+            event_description = (
+                f"Тип прибирання: {cleaning_type_display}\n"
+                f"Тип житла: {property_type_display}\n"
+                f"Площа: {area_m2} м²\n"
+                f"Клієнт: @{message.from_user.username if message.from_user.username else 'без username'}\n"
+                f"Telegram ID: {message.from_user.id}"
+            )
+            
+            # Get calendar service
+            calendar_service = get_calendar_service()
+            calendar_id = os.getenv("GOOGLE_CALENDAR_ID", "primary")
+            
+            # Create event
+            event_id = create_calendar_event(
+                calendar_service=calendar_service,
+                calendar_id=calendar_id,
+                title=event_title,
+                description=event_description,
+                start_datetime=start_datetime,
+                end_datetime=end_datetime,
+                location=address
+            )
+            
+            if event_id:
+                logger.info(
+                    f"Calendar event created successfully. Event ID: {event_id} "
+                    f"for user {message.from_user.id}"
+                )
+            else:
+                logger.warning(
+                    f"Failed to create calendar event for user {message.from_user.id}. "
+                    f"Booking data saved but event not created."
+                )
+    except Exception as e:
+        logger.error(f"Error creating calendar event: {e}", exc_info=True)
+        # Don't fail the booking if calendar creation fails
     
     # Log booking
     logger.info(

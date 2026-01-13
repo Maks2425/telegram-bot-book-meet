@@ -16,7 +16,8 @@ from googleapiclient.errors import HttpError
 load_dotenv()
 
 # Google Calendar API scope
-SCOPES = ['https://www.googleapis.com/auth/calendar.readonly']
+# Changed to full access to allow creating events
+SCOPES = ['https://www.googleapis.com/auth/calendar']
 
 
 def get_calendar_service() -> Optional[object]:
@@ -211,4 +212,71 @@ def generate_available_time_slots(
             available_slots.append(slot)
     
     return available_slots
+
+
+def create_calendar_event(
+    calendar_service: object,
+    calendar_id: str,
+    title: str,
+    description: str,
+    start_datetime: datetime,
+    end_datetime: datetime,
+    location: str = "",
+    timezone: str = "Europe/Kyiv"
+) -> Optional[str]:
+    """Create an event in Google Calendar.
+    
+    Args:
+        calendar_service: Google Calendar service object.
+        calendar_id: Calendar ID (use 'primary' for primary calendar).
+        title: Event title.
+        description: Event description.
+        start_datetime: Event start datetime.
+        end_datetime: Event end datetime.
+        location: Event location (address).
+        timezone: Timezone string (default: Europe/Kyiv).
+        
+    Returns:
+        Event ID if successful, None otherwise.
+    """
+    if not calendar_service:
+        print("Warning: Calendar service not available. Cannot create event.")
+        return None
+    
+    try:
+        # Format datetime for API (RFC3339 format)
+        start_time = start_datetime.isoformat()
+        end_time = end_datetime.isoformat()
+        
+        # Create event body
+        event = {
+            'summary': title,
+            'description': description,
+            'start': {
+                'dateTime': start_time,
+                'timeZone': timezone,
+            },
+            'end': {
+                'dateTime': end_time,
+                'timeZone': timezone,
+            },
+            'location': location,
+        }
+        
+        # Insert event
+        created_event = calendar_service.events().insert(
+            calendarId=calendar_id,
+            body=event
+        ).execute()
+        
+        event_id = created_event.get('id')
+        print(f"Event created successfully. Event ID: {event_id}")
+        return event_id
+    
+    except HttpError as e:
+        print(f"Error creating calendar event: {e}")
+        return None
+    except Exception as e:
+        print(f"Unexpected error creating event: {e}")
+        return None
 
