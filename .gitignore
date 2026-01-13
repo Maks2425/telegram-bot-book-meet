@@ -43,3 +43,9 @@ Thumbs.db
 # Logs
 *.log
 
+# Google Service Account keys
+service-account-key.json
+*-key.json
+credentials.json
+token.json
+

@@ -14,4 +14,13 @@ class CleaningCalculationStates(StatesGroup):
     
     # Step 3: Enter area
     entering_area = State()
+    
+    # Step 4: Select booking date
+    selecting_date = State()
+    
+    # Step 5: Select booking time
+    selecting_time = State()
+    
+    # Step 6: Enter address
+    entering_address = State()
 

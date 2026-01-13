@@ -19,7 +19,9 @@ from config import get_bot_token, load_config
 from keyboards.cleaning import (
     get_book_cleaning_keyboard,
     get_cleaning_type_keyboard,
+    get_date_selection_keyboard,
     get_property_type_keyboard,
+    get_time_selection_keyboard,
 )
 from keyboards.start import get_start_keyboard
 from services.pricing import calculate_cleaning_price
@@ -96,6 +98,8 @@ async def text_message_handler(message: Message, state: FSMContext) -> None:
     # If we're in area entering state, process the area input
     if current_state == CleaningCalculationStates.entering_area:
         await process_area_input(message, state)
+    elif current_state == CleaningCalculationStates.entering_address:
+        await process_address_input(message, state)
     else:
         # Otherwise show menu
         await show_menu(message)
@@ -204,6 +208,81 @@ async def process_area_input(message: Message, state: FSMContext) -> None:
         await show_menu(message)
 
 
+async def process_address_input(message: Message, state: FSMContext) -> None:
+    """Process address input.
+    
+    Args:
+        message: Telegram message object.
+        state: FSM context.
+    """
+    if not message.text:
+        await message.answer("Будь ласка, введіть адресу текстом.")
+        return
+    
+    address = message.text.strip()
+    
+    if len(address) < 5:
+        await message.answer("❌ Адреса занадто коротка. Будь ласка, введіть повну адресу:")
+        return
+    
+    # Save address to state
+    await state.update_data(address=address)
+    
+    # Get all booking data
+    data = await state.get_data()
+    
+    # Format summary
+    from datetime import date as date_type
+    from services.date_utils import format_date_ukrainian
+    
+    selected_date_str = data.get("selected_date")
+    selected_time = data.get("selected_time")
+    cleaning_type = data.get("cleaning_type")
+    property_type = data.get("property_type")
+    area_m2 = data.get("area_m2")
+    
+    # Format cleaning type name
+    cleaning_type_names = {
+        "maintenance": "Підтримуюче",
+        "deep": "Генеральне",
+        "post_renovation": "Після ремонту"
+    }
+    
+    property_type_names = {
+        "apartment": "Квартира",
+        "house": "Будинок"
+    }
+    
+    if selected_date_str:
+        selected_date = date_type.fromisoformat(selected_date_str)
+        formatted_date = format_date_ukrainian(selected_date)
+    else:
+        formatted_date = "Не вказано"
+    
+    summary_message = (
+        f"✅ Бронювання підтверджено!\n\n"
+        f"📋 Деталі замовлення:\n"
+        f"• Тип прибирання: {cleaning_type_names.get(cleaning_type, cleaning_type)}\n"
+        f"• Тип житла: {property_type_names.get(property_type, property_type)}\n"
+        f"• Площа: {area_m2} м²\n"
+        f"• Дата: {formatted_date}\n"
+        f"• Час: {selected_time}\n"
+        f"• Адреса: {address}\n\n"
+        f"✅ Дякуємо за замовлення! Наш менеджер зв'яжеться з вами найближчим часом для підтвердження."
+    )
+    
+    await message.answer(text=summary_message)
+    
+    # Log booking
+    logger.info(
+        f"User {message.from_user.id} completed booking. "
+        f"Date: {selected_date_str}, Time: {selected_time}, Address: {address}"
+    )
+    
+    # Clear FSM state
+    await state.clear()
+
+
 async def callback_handler(callback: CallbackQuery, state: FSMContext) -> None:
     """Handle inline keyboard callbacks.
     
@@ -273,13 +352,79 @@ async def callback_handler(callback: CallbackQuery, state: FSMContext) -> None:
             )
             return
         
-        # Handle "book_cleaning" - final booking step
+        # Handle "book_cleaning" - show date selection
         if callback_data == "book_cleaning":
+            await state.set_state(CleaningCalculationStates.selecting_date)
             await callback.message.answer(
-                text="✅ Дякуємо за вибір! Ваша заявка на бронювання клінінгу прийнята.\n\n"
-                     "Наш менеджер зв'яжеться з вами найближчим часом."
+                text="📅 Оберіть дату для бронювання:",
+                reply_markup=get_date_selection_keyboard()
             )
-            await state.clear()
+            return
+        
+        # Handle date selection
+        if callback_data.startswith("select_date:"):
+            from datetime import date as date_type
+            
+            date_str = callback_data.split(":")[1]
+            try:
+                selected_date = date_type.fromisoformat(date_str)
+                await state.update_data(selected_date=date_str)
+                
+                # Format date for display
+                from services.date_utils import format_date_ukrainian
+                formatted_date = format_date_ukrainian(selected_date)
+                
+                # Move to time selection state
+                await state.set_state(CleaningCalculationStates.selecting_time)
+                
+                # Show time selection with selected date reminder
+                await callback.message.answer(
+                    text=f"📅 Обрана дата: {formatted_date}\n\n"
+                         f"🕐 Оберіть час для бронювання:",
+                    reply_markup=get_time_selection_keyboard(selected_date)
+                )
+                return
+            except ValueError as e:
+                logger.error(f"Invalid date format: {date_str}, error: {e}")
+                await callback.message.answer("❌ Помилка формату дати. Спробуйте ще раз.")
+                return
+        
+        # Handle time selection
+        if callback_data.startswith("select_time:"):
+            time_str = callback_data.split(":")[1]
+            await state.update_data(selected_time=time_str)
+            
+            # Get selected date from state
+            data = await state.get_data()
+            selected_date_str = data.get("selected_date")
+            
+            if not selected_date_str:
+                await callback.message.answer("❌ Помилка: дата не збережена. Почніть спочатку.")
+                await state.clear()
+                return
+            
+            from datetime import date as date_type
+            from services.date_utils import format_date_ukrainian
+            selected_date = date_type.fromisoformat(selected_date_str)
+            formatted_date = format_date_ukrainian(selected_date)
+            
+            # Move to address entry state
+            await state.set_state(CleaningCalculationStates.entering_address)
+            
+            await callback.message.answer(
+                text=f"✅ Ви обрали:\n"
+                     f"📅 Дата: {formatted_date}\n"
+                     f"🕐 Час: {time_str}\n\n"
+                     f"📍 Введіть адресу для прибирання:"
+            )
+            return
+        
+        # Handle no slots available
+        if callback_data == "no_slots_available":
+            await callback.message.answer(
+                text="❌ На жаль, на обрану дату немає доступних часових слотів.\n\n"
+                     "Будь ласка, оберіть іншу дату."
+            )
             return
         
         # Unknown callback
