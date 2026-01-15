@@ -51,6 +51,16 @@ pip install -r requirements.txt
    BOT_TOKEN=ваш_токен_бота_тут
    ```
 
+3. (Опціонально) Додайте свій Telegram ID для отримання сповіщень про нові бронювання:
+   ```env
+   OWNER_TELEGRAM_ID=123456789
+   ```
+   
+   **Як знайти свій Telegram ID:**
+   - Напишіть боту [@userinfobot](https://t.me/userinfobot) в Telegram
+   - Він надішле вам ваш ID
+   - Скопіюйте число та додайте в `.env` файл
+
 ## Запуск бота
 
 ### Варіант 1: З активацією venv

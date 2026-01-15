@@ -39,6 +39,26 @@ def get_bot_token() -> str:
     return token
 
 
+def get_owner_telegram_id() -> Optional[int]:
+    """Get owner Telegram ID from environment variable.
+    
+    Returns:
+        Owner Telegram ID as integer, or None if not set.
+        
+    Note:
+        This is optional - if not set, owner notifications will be skipped.
+    """
+    owner_id_str: Optional[str] = os.getenv("OWNER_TELEGRAM_ID")
+    
+    if not owner_id_str:
+        return None
+    
+    try:
+        return int(owner_id_str.strip())
+    except ValueError:
+        return None
+
+
 # Calendar Configuration
 CALENDAR_TIMEZONE: str = "Europe/Stockholm"
 CALENDAR_WORK_START: time = time(8, 0)  # 8:00 AM

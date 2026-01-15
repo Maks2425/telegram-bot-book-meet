@@ -9,7 +9,11 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 from zoneinfo import ZoneInfo
 
-from config import CALENDAR_CLEANING_DURATION_HOURS, CALENDAR_TIMEZONE
+from config import (
+    CALENDAR_CLEANING_DURATION_HOURS,
+    CALENDAR_TIMEZONE,
+    get_owner_telegram_id,
+)
 from keyboards.cleaning import get_book_cleaning_keyboard
 from keyboards.start import get_start_keyboard
 from services.calendar_service import create_calendar_event, get_calendar_service
@@ -246,6 +250,21 @@ async def process_address_input(message: Message, state: FSMContext) -> None:
         property_type_names=property_type_names
     )
     
+    # Send notification to owner
+    await _notify_owner(
+        bot=message.bot,
+        client_username=message.from_user.username,
+        client_id=message.from_user.id,
+        cleaning_type=cleaning_type,
+        property_type=property_type,
+        area_m2=area_m2,
+        selected_date_str=selected_date_str,
+        selected_time=selected_time,
+        address=address,
+        cleaning_type_names=cleaning_type_names,
+        property_type_names=property_type_names
+    )
+    
     # Log booking
     logger.info(
         f"User {message.from_user.id} completed booking. "
@@ -357,4 +376,90 @@ async def _create_calendar_event(
     except Exception as e:
         logger.error(f"Error creating calendar event: {e}", exc_info=True)
         # Don't fail the booking if calendar creation fails
+
+
+async def _notify_owner(
+    bot,
+    client_username: str | None,
+    client_id: int,
+    cleaning_type: str | None,
+    property_type: str | None,
+    area_m2: float | None,
+    selected_date_str: str | None,
+    selected_time: str | None,
+    address: str,
+    cleaning_type_names: dict[str, str],
+    property_type_names: dict[str, str]
+) -> None:
+    """Send booking notification to owner.
+    
+    Args:
+        bot: Bot instance for sending messages.
+        client_username: Client's Telegram username.
+        client_id: Client's Telegram ID.
+        cleaning_type: Cleaning type code.
+        property_type: Property type code.
+        area_m2: Area in square meters.
+        selected_date_str: Selected date in ISO format.
+        selected_time: Selected time string.
+        address: Booking address.
+        cleaning_type_names: Mapping of cleaning type codes to names.
+        property_type_names: Mapping of property type codes to names.
+    """
+    owner_id = get_owner_telegram_id()
+    
+    if not owner_id:
+        logger.debug("OWNER_TELEGRAM_ID not set, skipping owner notification")
+        return
+    
+    try:
+        # Build notification message
+        notification_parts = ["🔔 НОВЕ БРОНЮВАННЯ\n"]
+        
+        # Client info
+        client_display = f"@{client_username}" if client_username else f"ID: {client_id}"
+        notification_parts.append(f"👤 Клієнт: {client_display}")
+        notification_parts.append(f"🆔 Telegram ID: {client_id}\n")
+        
+        # Booking details
+        notification_parts.append("📋 Деталі замовлення:")
+        
+        if cleaning_type:
+            cleaning_type_display = cleaning_type_names.get(cleaning_type, cleaning_type)
+            notification_parts.append(f"• Тип прибирання: {cleaning_type_display}")
+        
+        if property_type:
+            property_type_display = property_type_names.get(property_type, property_type)
+            notification_parts.append(f"• Тип житла: {property_type_display}")
+        
+        if area_m2:
+            notification_parts.append(f"• Площа: {area_m2} м²")
+        
+        if selected_date_str:
+            selected_date = date_type.fromisoformat(selected_date_str)
+            formatted_date = format_date_ukrainian(selected_date)
+            notification_parts.append(f"• Дата: {formatted_date}")
+        
+        if selected_time:
+            notification_parts.append(f"• Час: {selected_time}")
+        
+        notification_parts.append(f"• Адреса: {address}")
+        
+        notification_message = "\n".join(notification_parts)
+        
+        # Send message to owner
+        await bot.send_message(
+            chat_id=owner_id,
+            text=notification_message
+        )
+        
+        logger.info(f"Owner notification sent successfully to {owner_id}")
+        
+    except Exception as e:
+        logger.error(
+            f"Error sending owner notification: {e}. "
+            f"Owner ID: {owner_id}",
+            exc_info=True
+        )
+        # Don't fail the booking if notification fails
 
