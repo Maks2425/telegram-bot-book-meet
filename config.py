@@ -5,6 +5,7 @@ for secure configuration management.
 """
 
 import os
+from datetime import time
 from typing import Optional
 
 from dotenv import load_dotenv
@@ -36,4 +37,12 @@ def get_bot_token() -> str:
         raise ValueError("BOT_TOKEN cannot be empty")
     
     return token
+
+
+# Calendar Configuration
+CALENDAR_TIMEZONE: str = "Europe/Stockholm"
+CALENDAR_WORK_START: time = time(8, 0)  # 8:00 AM
+CALENDAR_WORK_END: time = time(18, 0)    # 6:00 PM (18:00)
+CALENDAR_SLOT_INTERVAL_HOURS: int = 2    # Interval between time slots
+CALENDAR_CLEANING_DURATION_HOURS: int = 2  # Duration of cleaning appointment
 

@@ -1,10 +1,14 @@
 """Keyboards for cleaning booking process."""
 
 import os
-from datetime import date, time
-from typing import List
+from datetime import date
 
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from config import (
+    CALENDAR_SLOT_INTERVAL_HOURS,
+    CALENDAR_WORK_END,
+    CALENDAR_WORK_START,
+)
 from services.calendar_service import generate_available_time_slots, get_calendar_service
 from services.date_utils import get_next_working_days
 
@@ -123,14 +127,14 @@ def get_time_selection_keyboard(selected_date: date) -> InlineKeyboardMarkup:
     calendar_service = get_calendar_service()
     calendar_id = os.getenv("GOOGLE_CALENDAR_ID", "primary")
     
-    # Generate available time slots (8:00-18:00, every 2 hours)
+    # Generate available time slots (from config)
     available_slots = generate_available_time_slots(
         date_obj=selected_date,
         calendar_service=calendar_service,
         calendar_id=calendar_id,
-        work_start=time(8, 0),
-        work_end=time(18, 0),
-        slot_interval_hours=2
+        work_start=CALENDAR_WORK_START,
+        work_end=CALENDAR_WORK_END,
+        slot_interval_hours=CALENDAR_SLOT_INTERVAL_HOURS
     )
     
     buttons = []

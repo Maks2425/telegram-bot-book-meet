@@ -12,6 +12,14 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
+from config import (
+    CALENDAR_CLEANING_DURATION_HOURS,
+    CALENDAR_SLOT_INTERVAL_HOURS,
+    CALENDAR_TIMEZONE,
+    CALENDAR_WORK_END,
+    CALENDAR_WORK_START,
+)
+
 # Load environment variables
 load_dotenv()
 
@@ -82,7 +90,7 @@ def get_busy_time_slots(
     calendar_service: object,
     calendar_id: str,
     date_obj: date,
-    timezone: str = "Europe/Kyiv"
+    timezone: Optional[str] = None
 ) -> List[Tuple[time, time]]:
     """Get busy time slots for a specific date.
     
@@ -90,11 +98,14 @@ def get_busy_time_slots(
         calendar_service: Google Calendar service object.
         calendar_id: Calendar ID (use 'primary' for primary calendar).
         date_obj: Date to check.
-        timezone: Timezone string (default: Europe/Kyiv).
+        timezone: Timezone string (default: from config).
         
     Returns:
         List of tuples (start_time, end_time) for busy slots.
     """
+    if timezone is None:
+        timezone = CALENDAR_TIMEZONE
+    
     if not calendar_service:
         return []
     
@@ -154,9 +165,9 @@ def generate_available_time_slots(
     date_obj: date,
     calendar_service: Optional[object] = None,
     calendar_id: str = "primary",
-    work_start: time = time(8, 0),
-    work_end: time = time(18, 0),
-    slot_interval_hours: int = 2
+    work_start: Optional[time] = None,
+    work_end: Optional[time] = None,
+    slot_interval_hours: Optional[int] = None
 ) -> List[time]:
     """Generate available time slots for a date.
     
@@ -164,13 +175,21 @@ def generate_available_time_slots(
         date_obj: Date to generate slots for.
         calendar_service: Google Calendar service (optional).
         calendar_id: Calendar ID to check (default: 'primary').
-        work_start: Start of working hours (default: 8:00).
-        work_end: End of working hours (default: 18:00).
-        slot_interval_hours: Interval between slots in hours (default: 2).
+        work_start: Start of working hours (default: from config).
+        work_end: End of working hours (default: from config).
+        slot_interval_hours: Interval between slots in hours (default: from config).
         
     Returns:
         List of available time slots.
     """
+    # Use config defaults if not provided
+    if work_start is None:
+        work_start = CALENDAR_WORK_START
+    if work_end is None:
+        work_end = CALENDAR_WORK_END
+    if slot_interval_hours is None:
+        slot_interval_hours = CALENDAR_SLOT_INTERVAL_HOURS
+    
     # Skip weekends
     if date_obj.weekday() >= 5:  # Saturday (5) or Sunday (6)
         return []
@@ -222,7 +241,7 @@ def create_calendar_event(
     start_datetime: datetime,
     end_datetime: datetime,
     location: str = "",
-    timezone: str = "Europe/Kyiv"
+    timezone: Optional[str] = None
 ) -> Optional[str]:
     """Create an event in Google Calendar.
     
@@ -234,11 +253,14 @@ def create_calendar_event(
         start_datetime: Event start datetime.
         end_datetime: Event end datetime.
         location: Event location (address).
-        timezone: Timezone string (default: Europe/Kyiv).
+        timezone: Timezone string (default: from config).
         
     Returns:
         Event ID if successful, None otherwise.
     """
+    if timezone is None:
+        timezone = CALENDAR_TIMEZONE
+    
     if not calendar_service:
         print("Warning: Calendar service not available. Cannot create event.")
         return None

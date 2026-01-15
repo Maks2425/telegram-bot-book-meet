@@ -128,13 +128,13 @@ async def process_area_input(message: Message, state: FSMContext) -> None:
             )
             return
         
-        # Save area to state
-        await state.update_data(area_m2=area)
-        
-        # Get all saved data
+        # Get existing data first
         data = await state.get_data()
         cleaning_type = data.get("cleaning_type")
         property_type = data.get("property_type")
+        
+        # Save area to state (ensure all data is preserved)
+        await state.update_data(area_m2=area)
         
         if not cleaning_type or not property_type:
             logger.error("Missing data in FSM state")
@@ -190,13 +190,20 @@ async def process_area_input(message: Message, state: FSMContext) -> None:
             reply_markup=keyboard
         )
         
-        # Clear FSM state
-        await state.clear()
+        # Don't clear FSM state here - we need the data for booking
+        # State will be cleared after booking is completed
+        # Ensure all data is saved in state
+        await state.update_data(
+            cleaning_type=cleaning_type,
+            property_type=property_type,
+            area_m2=area
+        )
         
         logger.info(
             f"User {message.from_user.id} calculated price: {price_info['final_price']} UAH "
             f"(type: {cleaning_type}, property: {property_type}, area: {area}, "
-            f"discount: {price_info['discount_percent']}%)"
+            f"discount: {price_info['discount_percent']}%). "
+            f"Data saved to FSM: cleaning_type={cleaning_type}, property_type={property_type}, area_m2={area}"
         )
         
     except ValueError:
@@ -233,6 +240,9 @@ async def process_address_input(message: Message, state: FSMContext) -> None:
     # Get all booking data
     data = await state.get_data()
     
+    # Log all data for debugging
+    logger.info(f"FSM data for user {message.from_user.id}: {data}")
+    
     # Format summary
     from datetime import date as date_type
     from services.date_utils import format_date_ukrainian
@@ -242,6 +252,13 @@ async def process_address_input(message: Message, state: FSMContext) -> None:
     cleaning_type = data.get("cleaning_type")
     property_type = data.get("property_type")
     area_m2 = data.get("area_m2")
+    
+    # If data is missing, try to get it from calculation step
+    if not cleaning_type or not property_type or not area_m2:
+        logger.warning(
+            f"Missing booking data for user {message.from_user.id}. "
+            f"cleaning_type: {cleaning_type}, property_type: {property_type}, area_m2: {area_m2}"
+        )
     
     # Format cleaning type name
     cleaning_type_names = {
@@ -261,17 +278,28 @@ async def process_address_input(message: Message, state: FSMContext) -> None:
     else:
         formatted_date = "Не вказано"
     
-    summary_message = (
-        f"✅ Бронювання підтверджено!\n\n"
-        f"📋 Деталі замовлення:\n"
-        f"• Тип прибирання: {cleaning_type_names.get(cleaning_type, cleaning_type)}\n"
-        f"• Тип житла: {property_type_names.get(property_type, property_type)}\n"
-        f"• Площа: {area_m2} м²\n"
-        f"• Дата: {formatted_date}\n"
-        f"• Час: {selected_time}\n"
-        f"• Адреса: {address}\n\n"
-        f"✅ Дякуємо за замовлення! Наш менеджер зв'яжеться з вами найближчим часом для підтвердження."
-    )
+    # Build summary message - only include available data
+    summary_parts = ["✅ Бронювання підтверджено!\n\n📋 Деталі замовлення:"]
+    
+    if cleaning_type:
+        summary_parts.append(f"• Тип прибирання: {cleaning_type_names.get(cleaning_type, cleaning_type)}")
+    
+    if property_type:
+        summary_parts.append(f"• Тип житла: {property_type_names.get(property_type, property_type)}")
+    
+    if area_m2:
+        summary_parts.append(f"• Площа: {area_m2} м²")
+    
+    if formatted_date != "Не вказано":
+        summary_parts.append(f"• Дата: {formatted_date}")
+    
+    if selected_time:
+        summary_parts.append(f"• Час: {selected_time}")
+    
+    summary_parts.append(f"• Адреса: {address}")
+    summary_parts.append("\n✅ Дякуємо за замовлення! Наш менеджер зв'яжеться з вами найближчим часом для підтвердження.")
+    
+    summary_message = "\n".join(summary_parts)
     
     await message.answer(text=summary_message)
     
@@ -284,27 +312,53 @@ async def process_address_input(message: Message, state: FSMContext) -> None:
         if selected_date_str and selected_time:
             # Parse date and time
             selected_date = date_type.fromisoformat(selected_date_str)
+            
+            # Parse time - handle both "10:00" and "10" formats
             time_parts = selected_time.split(':')
             hour = int(time_parts[0])
-            minute = int(time_parts[1])
+            # If no minutes specified, default to 0
+            minute = int(time_parts[1]) if len(time_parts) > 1 else 0
             
-            # Create datetime objects
-            start_datetime = datetime.combine(selected_date, time_type(hour, minute))
-            # Assume cleaning takes 2 hours (can be adjusted)
-            end_datetime = start_datetime + timedelta(hours=2)
+            # Create datetime objects with timezone (from config)
+            from zoneinfo import ZoneInfo
+            from config import CALENDAR_CLEANING_DURATION_HOURS, CALENDAR_TIMEZONE
             
-            # Format event details
-            cleaning_type_display = cleaning_type_names.get(cleaning_type, cleaning_type)
-            property_type_display = property_type_names.get(property_type, property_type)
+            tz = ZoneInfo(CALENDAR_TIMEZONE)
+            start_datetime = datetime.combine(selected_date, time_type(hour, minute), tzinfo=tz)
+            # Cleaning duration from config
+            end_datetime = start_datetime + timedelta(hours=CALENDAR_CLEANING_DURATION_HOURS)
             
-            event_title = f"Прибирання: {cleaning_type_display} ({property_type_display})"
-            event_description = (
-                f"Тип прибирання: {cleaning_type_display}\n"
-                f"Тип житла: {property_type_display}\n"
-                f"Площа: {area_m2} м²\n"
-                f"Клієнт: @{message.from_user.username if message.from_user.username else 'без username'}\n"
-                f"Telegram ID: {message.from_user.id}"
-            )
+            # Format event details - only include available data
+            event_title_parts = ["Прибирання"]
+            event_description_parts = []
+            
+            # Add cleaning type if available
+            if cleaning_type:
+                cleaning_type_display = cleaning_type_names.get(cleaning_type, cleaning_type)
+                event_title_parts.append(cleaning_type_display)
+                event_description_parts.append(f"Тип прибирання: {cleaning_type_display}")
+            
+            # Add property type if available
+            if property_type:
+                property_type_display = property_type_names.get(property_type, property_type)
+                if cleaning_type:
+                    event_title_parts.append(f"({property_type_display})")
+                else:
+                    event_title_parts.append(property_type_display)
+                event_description_parts.append(f"Тип житла: {property_type_display}")
+            
+            # Add area if available
+            if area_m2:
+                event_description_parts.append(f"Площа: {area_m2} м²")
+            
+            # Always add client info
+            client_username = message.from_user.username if message.from_user.username else 'без username'
+            event_description_parts.append(f"Клієнт: @{client_username}")
+            event_description_parts.append(f"Telegram ID: {message.from_user.id}")
+            
+            # Build title and description
+            event_title = " ".join(event_title_parts)
+            event_description = "\n".join(event_description_parts)
             
             # Get calendar service
             calendar_service = get_calendar_service()
