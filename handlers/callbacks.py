@@ -10,6 +10,7 @@ from aiogram.types import CallbackQuery
 from keyboards.cleaning import (
     get_cleaning_type_keyboard,
     get_date_selection_keyboard,
+    get_location_keyboard,
     get_property_type_keyboard,
     get_time_selection_keyboard,
 )
@@ -58,6 +59,8 @@ async def callback_handler(callback: CallbackQuery, state: FSMContext) -> None:
             await _handle_time_selection(callback, state)
         elif callback_data == "no_slots_available":
             await _handle_no_slots_available(callback)
+        elif callback_data == "no_available_days":
+            await _handle_no_available_days(callback)
         else:
             logger.warning(f"Unknown callback data: {callback_data}")
             await callback.message.answer("❌ Невідома дія.")
@@ -196,11 +199,14 @@ async def _handle_time_selection(callback: CallbackQuery, state: FSMContext) -> 
     # Move to address entry state
     await state.set_state(CleaningCalculationStates.entering_address)
     
+    location_keyboard = get_location_keyboard()
+    
     await callback.message.answer(
         text=f"✅ Ви обрали:\n"
              f"📅 Дата: {formatted_date}\n"
              f"🕐 Час: {time_str}\n\n"
-             f"📍 Введіть адресу для прибирання:"
+             f"📍 Введіть адресу для прибирання або поділіться локацією:",
+        reply_markup=location_keyboard
     )
 
 
@@ -213,5 +219,17 @@ async def _handle_no_slots_available(callback: CallbackQuery) -> None:
     await callback.message.answer(
         text="❌ На жаль, на обрану дату немає доступних часових слотів.\n\n"
              "Будь ласка, оберіть іншу дату."
+    )
+
+
+async def _handle_no_available_days(callback: CallbackQuery) -> None:
+    """Handle no available days callback.
+    
+    Args:
+        callback: Telegram callback query object.
+    """
+    await callback.message.answer(
+        text="❌ На жаль, на найближчі дні немає доступних слотів для бронювання.\n\n"
+             "Будь ласка, спробуйте пізніше або зв'яжіться з нами безпосередньо."
     )
 

@@ -3,7 +3,12 @@
 import os
 from datetime import date
 
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import (
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    KeyboardButton,
+    ReplyKeyboardMarkup,
+)
 from config import (
     CALENDAR_SLOT_INTERVAL_HOURS,
     CALENDAR_WORK_END,
@@ -94,19 +99,55 @@ def get_book_cleaning_keyboard() -> InlineKeyboardMarkup:
 def get_date_selection_keyboard() -> InlineKeyboardMarkup:
     """Create keyboard for selecting booking date.
     
+    Only shows dates that have available time slots.
+    
     Returns:
-        InlineKeyboardMarkup with 3-5 next working days.
+        InlineKeyboardMarkup with 3-5 next working days that have available slots.
     """
-    working_days = get_next_working_days(count=5)
+    # Get calendar service
+    calendar_service = get_calendar_service()
+    calendar_id = os.getenv("GOOGLE_CALENDAR_ID", "primary")
+    
+    # Get more working days to check (up to 14 days ahead to find 3-5 available)
+    working_days = get_next_working_days(count=14)
     
     buttons = []
+    available_days_count = 0
+    target_days = 5  # Show up to 5 days with available slots
+    
     for day_date, formatted_date in working_days:
-        # Use ISO format date string for callback_data
-        date_str = day_date.isoformat()
+        # Check if this day has available time slots
+        available_slots = generate_available_time_slots(
+            date_obj=day_date,
+            calendar_service=calendar_service,
+            calendar_id=calendar_id,
+            work_start=CALENDAR_WORK_START,
+            work_end=CALENDAR_WORK_END,
+            slot_interval_hours=CALENDAR_SLOT_INTERVAL_HOURS
+        )
+        
+        # Only add day if it has available slots
+        if available_slots:
+            # Use ISO format date string for callback_data
+            date_str = day_date.isoformat()
+            buttons.append([
+                InlineKeyboardButton(
+                    text=formatted_date,
+                    callback_data=f"select_date:{date_str}"
+                )
+            ])
+            available_days_count += 1
+            
+            # Stop when we have enough days
+            if available_days_count >= target_days:
+                break
+    
+    # If no days with available slots found, show message
+    if not buttons:
         buttons.append([
             InlineKeyboardButton(
-                text=formatted_date,
-                callback_data=f"select_date:{date_str}"
+                text="Немає доступних днів",
+                callback_data="no_available_days"
             )
         ])
     
@@ -158,5 +199,27 @@ def get_time_selection_keyboard(selected_date: date) -> InlineKeyboardMarkup:
         ])
     
     keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+    return keyboard
+
+
+def get_location_keyboard() -> ReplyKeyboardMarkup:
+    """Create keyboard with location sharing button.
+    
+    Returns:
+        ReplyKeyboardMarkup with "📍 Поділитися локацією" button.
+        User can also type address manually.
+    """
+    keyboard = ReplyKeyboardMarkup(
+        keyboard=[
+            [
+                KeyboardButton(
+                    text="📍 Поділитися локацією",
+                    request_location=True
+                )
+            ]
+        ],
+        resize_keyboard=True,
+        one_time_keyboard=True
+    )
     return keyboard
 

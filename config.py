@@ -12,7 +12,23 @@ from dotenv import load_dotenv
 
 
 def load_config() -> None:
-    """Load environment variables from .env file."""
+    """Load environment variables from .env file.
+    
+    Raises:
+        FileNotFoundError: If .env file does not exist.
+    """
+    import pathlib
+    
+    env_file = pathlib.Path(".env")
+    if not env_file.exists():
+        raise FileNotFoundError(
+            "Файл .env не знайдено!\n"
+            "Створіть файл .env в корені проекту з наступним вмістом:\n"
+            "BOT_TOKEN=ваш_токен_від_BotFather\n\n"
+            "Або скопіюйте .env.example:\n"
+            "Copy-Item .env.example .env"
+        )
+    
     load_dotenv()
 
 
@@ -23,7 +39,7 @@ def get_bot_token() -> str:
         Bot token string.
         
     Raises:
-        ValueError: If BOT_TOKEN is not set in environment variables.
+        ValueError: If BOT_TOKEN is not set in environment variables or invalid.
     """
     token: Optional[str] = os.getenv("BOT_TOKEN")
     
@@ -33,8 +49,27 @@ def get_bot_token() -> str:
             "Please create a .env file with BOT_TOKEN=your_token_here"
         )
     
-    if not token.strip():
+    token = token.strip()
+    
+    if not token:
         raise ValueError("BOT_TOKEN cannot be empty")
+    
+    # Basic validation: Telegram bot tokens typically have format: numbers:letters
+    # Example: 1234567890:ABCdefGHIjklMNOpqrsTUVwxyz
+    if ':' not in token:
+        raise ValueError(
+            "BOT_TOKEN format appears invalid. "
+            "Telegram bot tokens should have format: 'number:letters'. "
+            "Please check your token from @BotFather."
+        )
+    
+    parts = token.split(':', 1)
+    if len(parts) != 2 or not parts[0].isdigit() or not parts[1]:
+        raise ValueError(
+            "BOT_TOKEN format appears invalid. "
+            "Telegram bot tokens should have format: 'number:letters'. "
+            "Please check your token from @BotFather."
+        )
     
     return token
 

@@ -21,7 +21,7 @@ async def show_menu(message: Message) -> None:
         logger.warning("Received message without user")
         return
     
-    welcome_message: str = "Вітаю! Бот працює ✅\n\nОберіть опцію:"
+    welcome_message: str = "Вас вітає клінінгова компанія! \n\nОберіть опцію:"
     keyboard = get_start_keyboard()
     
     try:

@@ -24,6 +24,26 @@ from states import CleaningCalculationStates
 logger: Final[logging.Logger] = logging.getLogger(__name__)
 
 
+async def location_message_handler(message: Message, state: FSMContext) -> None:
+    """Handle location messages.
+    
+    Args:
+        message: Telegram message object with location.
+        state: FSM context.
+    """
+    if not message.location:
+        return
+    
+    logger.info(f"Received location from user {message.from_user.id}: {message.location.latitude}, {message.location.longitude}")
+    
+    current_state = await state.get_state()
+    if current_state == CleaningCalculationStates.entering_address:
+        await process_location_input(message, state)
+    else:
+        # Location shared outside of address entry state
+        await message.answer("📍 Будь ласка, поділіться локацією після вибору часу бронювання.")
+
+
 async def text_message_handler(message: Message, state: FSMContext) -> None:
     """Handle any text message - show menu or process FSM state.
     
@@ -36,6 +56,10 @@ async def text_message_handler(message: Message, state: FSMContext) -> None:
     """
     # Skip if it's a command (commands are handled separately)
     if message.text and message.text.startswith('/'):
+        return
+    
+    # Skip location messages (they are handled separately)
+    if message.location:
         return
     
     # Check current FSM state
@@ -162,6 +186,46 @@ async def process_area_input(message: Message, state: FSMContext) -> None:
         await show_menu(message)
 
 
+async def process_location_input(message: Message, state: FSMContext) -> None:
+    """Process location input and convert to address.
+    
+    Args:
+        message: Telegram message object with location.
+        state: FSM context.
+    """
+    if not message.location:
+        await message.answer("❌ Помилка: локація не отримана. Спробуйте ще раз.")
+        return
+    
+    location = message.location
+    latitude = location.latitude
+    longitude = location.longitude
+    
+    # Format address for display (with emoji for user)
+    address_display = f"📍 Координати: {latitude:.6f}, {longitude:.6f}"
+    
+    # Format address for calendar (just coordinates)
+    address_calendar = f"{latitude:.6f}, {longitude:.6f}"
+    
+    # Save both addresses and coordinates to state
+    await state.update_data(
+        address=address_display,  # For user display
+        address_calendar=address_calendar,  # For Google Calendar
+        location_latitude=latitude,
+        location_longitude=longitude
+    )
+    
+    # Remove location keyboard
+    from aiogram.types import ReplyKeyboardRemove
+    await message.answer(
+        text=f"✅ Локацію отримано!\n\n{address_display}\n\nОбробляю замовлення...",
+        reply_markup=ReplyKeyboardRemove()
+    )
+    
+    # Continue with booking process
+    await _complete_booking(message, state)
+
+
 async def process_address_input(message: Message, state: FSMContext) -> None:
     """Process address input and create calendar event.
     
@@ -179,9 +243,30 @@ async def process_address_input(message: Message, state: FSMContext) -> None:
         await message.answer("❌ Адреса занадто коротка. Будь ласка, введіть повну адресу:")
         return
     
-    # Save address to state
-    await state.update_data(address=address)
+    # Save address to state (for both display and calendar)
+    await state.update_data(
+        address=address,
+        address_calendar=address  # For text addresses, use the same value
+    )
     
+    # Remove location keyboard if it was shown
+    from aiogram.types import ReplyKeyboardRemove
+    await message.answer(
+        text="✅ Адресу збережено!\n\nОбробляю замовлення...",
+        reply_markup=ReplyKeyboardRemove()
+    )
+    
+    # Continue with booking process
+    await _complete_booking(message, state)
+
+
+async def _complete_booking(message: Message, state: FSMContext) -> None:
+    """Complete booking process - create summary, calendar event, and notify owner.
+    
+    Args:
+        message: Telegram message object.
+        state: FSM context.
+    """
     # Get all booking data
     data = await state.get_data()
     
@@ -193,6 +278,19 @@ async def process_address_input(message: Message, state: FSMContext) -> None:
     cleaning_type = data.get("cleaning_type")
     property_type = data.get("property_type")
     area_m2 = data.get("area_m2")
+    address = data.get("address")  # Display address for user
+    address_calendar = data.get("address_calendar")  # Calendar address (coordinates only)
+    
+    if not address:
+        logger.error("Address not found in FSM state")
+        await message.answer("❌ Помилка: адреса не збережена. Почніть спочатку.")
+        await state.clear()
+        from handlers.start import show_menu
+        await show_menu(message)
+        return
+    
+    # Use calendar address if available (for coordinates), otherwise use display address
+    calendar_address = address_calendar if address_calendar else address
     
     # Format cleaning type name
     cleaning_type_names = {
@@ -245,7 +343,7 @@ async def process_address_input(message: Message, state: FSMContext) -> None:
         cleaning_type=cleaning_type,
         property_type=property_type,
         area_m2=area_m2,
-        address=address,
+        address=calendar_address,  # Use calendar address (coordinates only for location)
         cleaning_type_names=cleaning_type_names,
         property_type_names=property_type_names
     )
