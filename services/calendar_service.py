@@ -1,5 +1,6 @@
 """Google Calendar service for checking available time slots."""
 
+import json
 import os
 from datetime import date, datetime, time, timedelta
 from typing import List, Optional, Tuple
@@ -39,14 +40,30 @@ def get_calendar_service() -> Optional[object]:
     creds = None
     
     # Try Service Account first (recommended for bots)
-    service_account_file = os.getenv("GOOGLE_SERVICE_ACCOUNT_FILE")
-    if service_account_file and os.path.exists(service_account_file):
+    # Option 1: From environment variable as JSON string (for deployment)
+    service_account_json = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
+    if service_account_json:
         try:
-            creds = ServiceAccountCredentials.from_service_account_file(
-                service_account_file, scopes=SCOPES
+            # Parse JSON string from environment variable
+            service_account_info = json.loads(service_account_json)
+            creds = ServiceAccountCredentials.from_service_account_info(
+                service_account_info, scopes=SCOPES
             )
+        except json.JSONDecodeError as e:
+            print(f"Error parsing GOOGLE_SERVICE_ACCOUNT_JSON: {e}")
         except Exception as e:
-            print(f"Error loading service account: {e}")
+            print(f"Error loading service account from JSON: {e}")
+    
+    # Option 2: From file path (for local development)
+    if not creds:
+        service_account_file = os.getenv("GOOGLE_SERVICE_ACCOUNT_FILE")
+        if service_account_file and os.path.exists(service_account_file):
+            try:
+                creds = ServiceAccountCredentials.from_service_account_file(
+                    service_account_file, scopes=SCOPES
+                )
+            except Exception as e:
+                print(f"Error loading service account file: {e}")
     
     # Try OAuth2 credentials
     if not creds:
