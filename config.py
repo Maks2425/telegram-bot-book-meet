@@ -12,24 +12,26 @@ from dotenv import load_dotenv
 
 
 def load_config() -> None:
-    """Load environment variables from .env file.
+    """Load environment variables from .env file (if exists).
     
-    Raises:
-        FileNotFoundError: If .env file does not exist.
+    This function attempts to load .env file for local development.
+    On deployment platforms (Railway, Render, etc.), environment variables
+    are set directly through the platform's interface, so .env file is not required.
+    
+    Note:
+        This function does not raise an error if .env file doesn't exist,
+        as it's expected on deployment platforms.
     """
     import pathlib
     
     env_file = pathlib.Path(".env")
-    if not env_file.exists():
-        raise FileNotFoundError(
-            "Файл .env не знайдено!\n"
-            "Створіть файл .env в корені проекту з наступним вмістом:\n"
-            "BOT_TOKEN=ваш_токен_від_BotFather\n\n"
-            "Або скопіюйте .env.example:\n"
-            "Copy-Item .env.example .env"
-        )
-    
-    load_dotenv()
+    if env_file.exists():
+        # Load .env file for local development
+        load_dotenv()
+    else:
+        # On deployment platforms, environment variables are set directly
+        # Try to load anyway (load_dotenv won't fail if file doesn't exist)
+        load_dotenv()
 
 
 def get_bot_token() -> str:
@@ -45,8 +47,9 @@ def get_bot_token() -> str:
     
     if not token:
         raise ValueError(
-            "BOT_TOKEN environment variable is not set. "
-            "Please create a .env file with BOT_TOKEN=your_token_here"
+            "BOT_TOKEN environment variable is not set.\n"
+            "For local development: Create a .env file with BOT_TOKEN=your_token_here\n"
+            "For deployment: Set BOT_TOKEN environment variable in your hosting platform"
         )
     
     token = token.strip()
