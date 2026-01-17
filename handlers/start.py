@@ -21,7 +21,7 @@ async def show_menu(message: Message) -> None:
         logger.warning("Received message without user")
         return
     
-    welcome_message: str = "Вас вітає клінінгова компанія! \n\nОберіть опцію:"
+    welcome_message: str = "Вас вітає клінінгова компанія Чиста Оселя! \n\nОберіть опцію:"
     keyboard = get_start_keyboard()
     
     try:
@@ -36,6 +36,10 @@ async def show_menu(message: Message) -> None:
 
 async def start_command_handler(message: Message, state: FSMContext) -> None:
     """Handle the /start command.
+    
+    This handler processes both:
+    - Command /start (typed manually or via deep link)
+    - Standard Telegram "Start" button (automatically sends /start command)
     
     Args:
         message: Telegram message object.
